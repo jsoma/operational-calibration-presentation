@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="pandoc">
+  <meta name="author" content="Jonathan Soma">
+  <meta name="dcterms.date" content="2021-02-17">
+  <title>Operational Calibration</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+  <link rel="stylesheet" href="https://unpkg.com/reveal.js//dist/reset.css">
+  <link rel="stylesheet" href="https://unpkg.com/reveal.js//dist/reveal.css">
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="https://unpkg.com/reveal.js//dist/theme/serif.css" id="theme">
+  <style>
+  h1.title {
+      font-size: 2em;
+  }
+
+  blockquote {
+      width: 90% !important;
+  }
+
+  .slides {
+      font-size: 0.75em;
+  }
+  .reveal ul {
+      display: block;
+  }
+  .reveal ol {
+      display: block;
+  }
+
+  img {
+      max-height: 350px !important;
+  }
+
+  figcaption {
+      font-size: 0.6em !important;
+      font-style: italic !important;
+  }
+
+  .subtitle {
+      font-style: italic !important;
+  }
+
+  .date {
+      font-size: 0.75em !important;
+  }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+<section id="title-slide">
+  <h1 class="title">Operational Calibration</h1>
+  <p class="subtitle">Software Engineering for Artificial Intelligence, Spring 2021</p>
+  <p class="author">Jonathan Soma</p>
+  <p class="date">February 17, 2021</p>
+</section>
+
+<section id="operational-calibration-debugging-confidence-errors-for-dnns-in-the-field-2020" class="slide level2">
+<h2>Operational Calibration: Debugging Confidence Errors for DNNs in the Field (2020)</h2>
+<p>Zenan Li, Xiaoxing Ma, Chang Xu, Jingwei Xu, Chun Cao, Jian Lü</p>
+</section>
+<section id="the-problem" class="slide level2">
+<h2>The Problem</h2>
+<p>When a DNN is wrong, it’s often more than just wrong: it’s <em>remarkably confident about these wrong answers</em>. They’re optimized for correct answers, not correct confidence.</p>
+<p>Why is this a problem for you? It encourages you to make decisions that might have grave consequences!</p>
+<aside class="notes">
+<p>Correct answers like classification. As long as it’s right or it’s wrong, that’s all that matters.</p>
+</aside>
+</section>
+<section id="domain-shift-or-dataset-shift" class="slide level2">
+<h2>Domain shift (or dataset shift)</h2>
+<p>How the problem is created, input-wise: the difference between training data and the real world “operational data”</p>
+<p><strong>Do you have millions of dollars to to train GPT-3 or AlphaGo?</strong> No, you’ll use COTS models and <em>maybe</em> fine-tune them.</p>
+<aside class="notes">
+<p>We aren’t Google or Facebook, we just take something trained on ImageNet and use it. COTS - consumer, off the shelf model.</p>
+<p>There’s a limited amount of fine-tuning we can do (not that fine tuning always helps)</p>
+<p>Paper thinks about a BUDGET for implementation. Realistic!</p>
+</aside>
+</section>
+<section id="one-answer-temperature-scaling" class="slide level2">
+<h2>One answer: Temperature Scaling</h2>
+<p>Even though we’re given a confidence score by softmax, <strong>we can’t trust it.</strong></p>
+<figure>
+<img data-src="images/temperature-scaling.png" alt="Temperature scaling finds a function R" /><figcaption aria-hidden="true">Temperature scaling finds a function R</figcaption>
+</figure>
+<p>Correct for systematic bias by finding a function to process the logit pre-softmax to match the result to the real proability.</p>
+<p><em>But it’s only systematic bias,</em> i.e. every input that generates same confidence has the same output probability.</p>
+<aside class="notes">
+<p>Really just a scaling factor, aka every 80% is turned into 60%.</p>
+<p>h is the logit, R is the scaling factor, softmax converts it into a probability</p>
+</aside>
+</section>
+<section id="this-papers-answer-operational-calibration" class="slide level2">
+<h2>This paper’s answer: Operational Calibration</h2>
+<p>It’s a given that the system will produce errors, so calibrate the confidence measures to something within reason. But acknowledge that <em>it isn’t systemic</em>.</p>
+<p>Operational Calibration doesn’t change the prediction, only the estimation of the likelihood that it is correct. <strong>Why is this important?</strong></p>
+<aside class="notes">
+<p>Take a set of your “real world” operational data.</p>
+<p>It’s like fine-tuning, but only for confidence scores.</p>
+<p>What if the prediction is wrong?</p>
+</aside>
+</section>
+<section id="brier-score" class="slide level2">
+<h2>Brier score</h2>
+<figure>
+<img data-src="images/brier-score.png" alt="The Brier score" /><figcaption aria-hidden="true">The Brier score</figcaption>
+</figure>
+<p>Quantify the accuracy of the confidence with mean-squared error of the estimation.</p>
+<p>I(x) is whether it was correctly classified or not.</p>
+<aside class="notes">
+<p>I hate math, but this is just the normal mean-squared error, just about how off the estimates are.</p>
+</aside>
+</section>
+<section id="the-formal-definition" class="slide level2">
+<h2>The formal definition</h2>
+<figure>
+<img data-src="images/definition.png" alt="The formal definition" /><figcaption aria-hidden="true">The formal definition</figcaption>
+</figure>
+<p>Test as much operational data as you can (the “budget”), and adjust confidence accordingly.</p>
+<blockquote>
+<p>The challenge here is to strike a balance between the priori that was learned from a huge training dataset but suffering from domain shift, and the evidence that is collected from the operation domain but limited in volume.</p>
+</blockquote>
+</section>
+<section id="how-do-we-do-it" class="slide level2">
+<h2>How do we do it?</h2>
+<p>We can’t test everything, so we use a Bayesian technique and model the problem as a Gaussian Process. As we get more data about how off the confidence scores are, we adjust.</p>
+<aside class="notes">
+<p>It’s a distribution, not just a number</p>
+</aside>
+</section>
+<section id="the-goal-gaussian-process-c" class="slide level2">
+<h2>The goal: Gaussian Process <em>c</em></h2>
+<figure>
+<img data-src="images/prob-difference.png" alt="Probability difference between true and softmax. Compare to Temperature Scaling." /><figcaption aria-hidden="true">Probability difference between true and softmax. Compare to Temperature Scaling.</figcaption>
+</figure>
+<figure>
+<img data-src="images/h-is-normal-dist.png" alt="h is zero-mean normal distribution" /><figcaption aria-hidden="true">h is zero-mean normal distribution</figcaption>
+</figure>
+<aside class="notes">
+<p>TS is just a single scaling function, while this will change based on the input.</p>
+</aside>
+</section>
+<section id="the-goal-gaussian-process-contd" class="slide level2">
+<h2>The goal: Gaussian Process (cont’d)</h2>
+<figure>
+<img data-src="images/utn-1.png" alt="Distribution of the confidence scores" /><figcaption aria-hidden="true">Distribution of the confidence scores</figcaption>
+</figure>
+<p>The mode of the distribution is our true/estimated probability score.</p>
+<aside class="notes">
+<p>A point should have a confidence related to the confidences around it.</p>
+<p>Similar inputs, similar outputs.</p>
+<p>As you get information about some points, it also changes the confidence of the other points. But where is the ‘point’?</p>
+</aside>
+</section>
+<section id="step-1-feature-extraction" class="slide level2">
+<h2>Step 1: Feature extraction</h2>
+<p>We treat the last hidden layer as the features of input <em>x</em>.</p>
+<p><strong>Assumption:</strong> A prediction by the network is more likely to be correct if it’s close to a correct prediction, and incorrect if close to an incorrect prediction. Same with confidences!</p>
+<p><strong>Assumption:</strong> Feature space is lumpy and clusterable.</p>
+</section>
+<section id="step-2-clustering" class="slide level2">
+<h2>Step 2: Clustering</h2>
+<p>Allows different clusters to have different covariance functions</p>
+<figure>
+<img data-src="images/clusters.png" alt="Visualization of clusters" /><figcaption aria-hidden="true">Visualization of clusters</figcaption>
+</figure>
+<p>Decreases computational cost of the Gaussian Processes - one for each cluster.</p>
+</section>
+<section id="lce-loss-due-to-confidence-error" class="slide level2">
+<h2>LCE (Loss due to confidence error)</h2>
+<p>Not all mistakes are created equal.</p>
+<figure>
+<img data-src="images/decision-making.png" alt="A simple cost model" /><figcaption aria-hidden="true">A simple cost model</figcaption>
+</figure>
+<p>This model assumes no cost or gain if no decision is made, and loss is <em>u</em> for a mistake.</p>
+<aside class="notes">
+<p>x = input</p>
+<p>λ = confidence score boundary</p>
+<p>I = 1 if correct 0 if incorrect</p>
+<p>g(x) = gain</p>
+<p>u = loss for mistake</p>
+</aside>
+</section>
+<section id="selecting-operational-data" class="slide level2">
+<h2>Selecting operational data</h2>
+<p>The focus of operational calibration is <strong>successful budgeting</strong>. You don’t have all the time, money, and labels in the world.</p>
+<p>How do you pick the data to improve the scores for?</p>
+</section>
+<section id="selecting-data-to-label" class="slide level2">
+<h2>Selecting data to label</h2>
+<ol type="1">
+<li>Select the operational input at center of each cluster, apply Gaussian Process to compute confidence distribution.</li>
+<li>Select the most “helpful” to label, update gaussian process.</li>
+<li>Repeat until budget is used up!</li>
+</ol>
+<p>You want to reduce variance as much as possible, and pay attention to those near the break-even threshold to reduce LCE.</p>
+<p><img data-src="images/reduce-lce.png" /></p>
+<aside class="notes">
+<p>delta is the your confidence boundary</p>
+<p>sigma is the variance</p>
+<p>gamma is the estimated confidence</p>
+</aside>
+</section>
+<section class="slide level2">
+
+<figure>
+<img data-src="images/algorithm.png" alt="The algorithm" /><figcaption aria-hidden="true">The algorithm</figcaption>
+</figure>
+</section>
+<section id="why-is-it-more-effective" class="slide level2">
+<h2>Why is it more effective?</h2>
+<figure>
+<img data-src="images/brier-score-decomp.png" alt="Brier score decomposition" /><figcaption aria-hidden="true">Brier score decomposition</figcaption>
+</figure>
+<ul>
+<li><strong>Realiability</strong> distance between confidence and true probability</li>
+<li><strong>Resolution</strong> distinctions of predictive probabilities</li>
+<li><strong>Uncertainty</strong> accuracy of the model</li>
+</ul>
+<p>Systemic error is only <em>reliability</em> (e.g. TS). OC also cares about <em>resolution</em>.</p>
+</section>
+<section id="when-is-it-not-more-effective" class="slide level2">
+<h2>When is it not more effective?</h2>
+<p>If the error <em>is</em> systemic, then you’re doing all of this extra work for nothing. Why put things into groups if each group is the same?</p>
+<p>When the cost of a false prediction is low enough, errors don’t matter and LCE doesn’t have an effect.</p>
+</section>
+<section id="empirical-evaluation" class="slide level2">
+<h2>Empirical evaluation</h2>
+<ol type="1">
+<li>Is our approach to operational calibration generally effective in different tasks?</li>
+<li>How effective it is, compared with alternative approaches?</li>
+<li>How efficient it is, in the sense of saving labeling efforts?</li>
+</ol>
+</section>
+<section id="six-tasks" class="slide level2">
+<h2>Six tasks</h2>
+<p>Varied across domains, operational dataset size, number of classes to classify (classification difficulty), and parameter size (model complexity).</p>
+<figure>
+<img data-src="images/tasks.png" alt="the six tasks" /><figcaption aria-hidden="true">the six tasks</figcaption>
+</figure>
+<aside class="notes">
+<ol type="1">
+<li>Images: Applied MNIST-trained model to similar but dirtier USPS data</li>
+<li>Text: Applied 2002-movie-review model to 2004-movie-review data</li>
+<li>Images: Applied CIFAR-10-trained model to STL</li>
+<li>Images: Applied CIFAR-100-trained model to cropped CIFAR-100</li>
+<li>Images: ImageNet 2012-trained model to Pascal VOC 2012</li>
+<li>Images: Applied pre-trained ImageNet Inception v3 to downsampled ImageNet</li>
+</ol>
+</aside>
+</section>
+<section class="slide level2">
+
+<p>Operational calibration worked <strong>wonders</strong> on the Brier score.</p>
+<figure>
+<img data-src="images/brier-outcome.png" alt="Effect on Brier score" /><figcaption aria-hidden="true">Effect on Brier score</figcaption>
+</figure>
+<p>No matter what kind of regression was used, it almost always came out over Temperature Scaling.</p>
+</section>
+<section id="relationship-to-fine-tuning" class="slide level2">
+<h2>Relationship to fine-tuning</h2>
+<p>Operational Calibration worked both when fine-tuning was effective (simple tasks, e.g. MNIST, binary classification) and when it was ineffective (non-trivial tasks, e.g. ImageNet). <strong>Fine-tuning does not necessarily provide accurate confidence</strong></p>
+<blockquote>
+<p>the Brier score would decrease more if we spent rest operation data on calibration than continuing on the fine-tuning</p>
+</blockquote>
+<p>Worthwhile in <strong>all situations</strong> when you want to control the impact of incorrect classifications.</p>
+</section>
+<section id="compared-to-other-methods" class="slide level2">
+<h2>Compared to other methods</h2>
+<figure>
+<img data-src="images/brier-outcome.png" alt="Brier outcome" /><figcaption aria-hidden="true">Brier outcome</figcaption>
+</figure>
+<p>Beat out temperature scaling, Platt scaling, enhanced Platt scaling, and Isotonic Regression.</p>
+<p>Also tried two other techniques for regression to see if GPR was the right approach. It was!</p>
+</section>
+<section id="efficiency" class="slide level2">
+<h2>Efficiency</h2>
+<p>While it works for metrics like LCE and Brier outcome, what about high-confidence false predictions? Labeled <strong>10% of operational data.</strong></p>
+<figure>
+<img data-src="images/false-predictions.png" alt="Change in false predictions" /><figcaption aria-hidden="true">Change in false predictions</figcaption>
+</figure>
+<p>What about accuracy? Is this actually an improvement? <strong>LCE went down</strong></p>
+</section>
+<section class="slide level2">
+
+<figure>
+<img data-src="images/high-conf-predictions.png" alt="High confidence predictions" /><figcaption aria-hidden="true">High confidence predictions</figcaption>
+</figure>
+</section>
+<section id="related-work" class="slide level2">
+<h2>Related work</h2>
+<p>The differentiating factor is it focuses on <strong>operational data</strong> and is easily useable with <strong>COTS systems</strong>. Is a DNN’s output a feature or a bug? Only know when it’s in production!</p>
+<p>Inspired by transfer learning, but operational calibration has very limited data from the target/operational domain.</p>
+<p>Active learning selected targets to label deliberately, like is done in OC with GPR.</p>
+</section>
+<section id="questions" class="slide level2">
+<h2>Questions?</h2>
+</section>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/reveal.js//dist/reveal.js"></script>
+
+  // reveal.js plugins
+  <script src="https://unpkg.com/reveal.js//plugin/notes/notes.js"></script>
+  <script src="https://unpkg.com/reveal.js//plugin/search/search.js"></script>
+  <script src="https://unpkg.com/reveal.js//plugin/zoom/zoom.js"></script>
+
+  <script>
+
+      // Full list of configuration options available at:
+      // https://revealjs.com/config/
+      Reveal.initialize({
+        // Push each slide change to the browser history
+        history: true,
+
+        // reveal.js plugins
+        plugins: [
+          RevealNotes,
+          RevealSearch,
+          RevealZoom
+        ]
+      });
+    </script>
+    </body>
+</html>
